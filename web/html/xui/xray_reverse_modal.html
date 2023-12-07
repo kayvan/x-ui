@@ -64,7 +64,7 @@
                 </td>
             </tr>
             <tr>
-                <td>{{ i18n "pages.xray.rules.outbound" }}</td>
+                <td>{{ i18n "pages.xray.rules.inbound" }}</td>
                 <td>
                     <a-form-item>
                         <a-checkbox-group
@@ -148,9 +148,9 @@
                 ]
             }
             this.isEdit = isEdit;
-            this.inboundTags = app.templateSettings.inbounds.map(obj => obj.tag);
+            this.inboundTags = app.templateSettings.inbounds.filter((i) => !ObjectUtil.isEmpty(i.tag)).map(obj => obj.tag);
             this.inboundTags.push(...app.inboundTags);
-            this.outboundTags = app.templateSettings.outbounds.map(obj => obj.tag);
+            this.outboundTags = app.templateSettings.outbounds.filter((o) => !ObjectUtil.isEmpty(o.tag)).map(obj => obj.tag);
         },
         close() {
             reverseModal.visible = false;

@@ -612,28 +612,118 @@ ssl_cert_issue_CF() {
     fi
 }
 
+update_geo_files() {
+echo -e "${green} ------------------------- "
+echo -e "${yellow} Advanced Geo System Updater Select Update Server "
+echo -e "${green}\t1.${plain} Github [Default] "
+echo -e "${green}\t2.${plain} jsDelivr CDN "
+echo -e "${green}\t0.${plain} Back To X-UI Menu "
+read -p "Select an option: " select
+
+case "$select" in
+    0) show_menu ;;
+    1|2)
+        local="/usr/local/x-ui/bin"
+        source_mapping=()
+
+        if [ "$select" -eq 1 ]; then
+            source_mapping=(
+                "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat geoip.dat"
+                "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat geosite.dat"
+                "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat geoip_IR.dat"
+                "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat geosite_IR.dat"
+                "https://github.com/bootmortis/iran-hosted-domains/releases/latest/download/iran.dat iran.dat"
+            )
+        elif [ "$select" -eq 2 ]; then
+            source_mapping=(
+                "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat geoip.dat"
+                "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat geosite.dat"
+                "https://cdn.jsdelivr.net/gh/chocolate4u/Iran-v2ray-rules@release/geoip.dat geoip_IR.dat"
+                "https://cdn.jsdelivr.net/gh/chocolate4u/Iran-v2ray-rules@release/geosite.dat geosite_IR.dat"
+                "https://github.com/bootmortis/iran-hosted-domains/releases/latest/download/iran.dat iran.dat"
+            )
+        fi
+
+        mkdir -p "$local" && chmod 764 "$local"
+
+        updated_files=()
+
+        function needs_update() {
+            local source="$1"
+            local destination="$2"
+
+            [ ! -e "$destination" ] || [ "$(wget -q --spider --no-check-certificate --timestamping "$source" && stat -c %Y "$destination")" != "$(stat -c %Y "$destination")" ]
+        }
+
+        for pair in "${source_mapping[@]}"; do
+            output_file="${local}/$(echo "$pair" | cut -d ' ' -f 2)"
+
+            if needs_update "$(echo "$pair" | cut -d ' ' -f 1)" "$output_file"; then
+                echo "Downloading $output_file..."
+                wget -q --no-check-certificate --timestamping --show-progress -O "$output_file" "$(echo "$pair" | cut -d ' ' -f 1)"
+                chmod 644 "$output_file"
+                updated_files+=("$output_file")
+            else
+                echo "$output_file is already up to date. No need to update."
+            fi
+        done
+
+        echo -e "\n---------------------------"
+        echo -e "      Summary Report       "
+        echo -e "---------------------------"
+
+        if [ ${#updated_files[@]} -gt 0 ]; then
+            echo -e "Number of Downloaded files: ${#updated_files[@]}"
+            echo "Downloaded files:"
+            for file in "${updated_files[@]}"; do
+                echo "  - $file"
+            done
+        else
+            echo -e "\nNo files were updated."
+        fi
+
+        echo -e "---------------------------"
+        sleep 1
+        read -p "Do you want to restart x-ui? (y/n): " restart_choice
+        if [[ $restart_choice == [Yy] ]]; then
+            systemctl restart x-ui
+            echo "X-UI has been restarted."
+        else
+            echo "X-UI was not restarted."
+        fi
+        before_show_menu
+        ;;
+    *)
+        LOGE "Please enter the correct number [0-2]"
+        update_geo_files
+        ;;
+esac
+}
+
 show_usage() {
-    echo "x-ui control menu usages: "
+    echo "X-UI Control Menu Usage"
     echo "------------------------------------------"
-    echo "x-ui              - Enter     Admin menu"
-    echo "x-ui start        - Start     x-ui"
-    echo "x-ui stop         - Stop      x-ui"
-    echo "x-ui restart      - Restart   x-ui"
-    echo "x-ui status       - Show      x-ui status"
-    echo "x-ui enable       - Enable    x-ui on system startup"
-    echo "x-ui disable      - Disable   x-ui on system startup"
-    echo "x-ui log          - Check     x-ui logs"
-    echo "x-ui update       - Update    x-ui"
-    echo "x-ui install      - Install   x-ui"
-    echo "x-ui uninstall    - Uninstall x-ui"
+    echo "SUBCOMMANDS:" 
+    echo "x-ui              - Admin management script"
+    echo "x-ui start        - Start X-UI"
+    echo "x-ui stop         - Stop X-UI"
+    echo "x-ui restart      - Restart X-UI"
+    echo "x-ui status       - Current X-UI status"
+    echo "x-ui enable       - Enable X-UI on system startup"
+    echo "x-ui disable      - Disable X-UI on system startup"
+    echo "x-ui log          - Check X-UI logs"
+    echo "x-ui update       - Update X-UI"
+    echo "x-ui install      - Install X-UI"
+    echo "x-ui uninstall    - Uninstall X-UI"
+    echo "x-ui help         - Control menu usage"
     echo "------------------------------------------"
 }
 
 show_menu() {
     echo -e "
-  ${green}X-UI Panel Management Script${plain}
+  ${green}X-UI Admin Management Script ${plain}
 ————————————————
-  ${green}0.${plain} Exit Script
+  ${green}0.${plain} Exit 
 ————————————————
   ${green}1.${plain} Install X-UI
   ${green}2.${plain} Update X-UI
@@ -646,7 +736,7 @@ show_menu() {
 ————————————————
   ${green}8.${plain} Start X-UI
   ${green}9.${plain} Stop X-UI
-  ${green}10.${plain} Reboot X-UI
+  ${green}10.${plain} Restart X-UI
   ${green}11.${plain} Check X-UI State
   ${green}12.${plain} Check X-UI Logs
 ————————————————
@@ -656,10 +746,11 @@ show_menu() {
   ${green}15.${plain} 一A Key Installation BBR (latest kernel)
   ${green}16.${plain} 一SSL Certificate Management
   ${green}17.${plain} 一Cloudflare SSL Certificate
+  ${green}18.${plain} 一Advanced Geo Updater
 ————————————————
  "
     show_status
-    echo && read -p "Please enter your selection [0-17]: " num
+    echo && read -p "Please enter your selection [0-18]: " num
 
     case "${num}" in
     0)
@@ -716,8 +807,11 @@ show_menu() {
     17)
         ssl_cert_issue_CF
         ;;
+    18)
+        update_geo_files
+        ;;
     *)
-        LOGE "Please enter the correct number [0-16]"
+        LOGE "Please enter the correct number [0-18]"
         ;;
     esac
 }
