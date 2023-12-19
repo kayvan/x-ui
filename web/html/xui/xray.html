@@ -3,9 +3,10 @@
 {{template "head" .}}
 <link rel="stylesheet" href="{{ .base_path }}assets/codemirror/codemirror.css">
 <link rel="stylesheet" href="{{ .base_path }}assets/codemirror/fold/foldgutter.css">
-<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/xq.css">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/xq.css?{{ .cur_ver }}">
 <link rel="stylesheet" href="{{ .base_path }}assets/codemirror/lint/lint.css">
 
+<script src="{{ .base_path }}assets/base64/base64.min.js"></script>
 <script src="{{ .base_path }}assets/js/model/outbound.js"></script>
 <script src="{{ .base_path }}assets/codemirror/codemirror.js"></script>
 <script src="{{ .base_path }}assets/codemirror/javascript.js"></script>
@@ -28,6 +29,10 @@
         .ant-tabs-nav .ant-tabs-tab {
             margin: 0;
             padding: 12px .5rem;
+        }
+        .ant-table-thead > tr > th,
+        .ant-table-tbody > tr > td {
+            padding: 10px 0px;
         }
     }
 
@@ -74,6 +79,14 @@
                                 <a-space direction="horizontal">
                                     <a-button type="primary" :disabled="saveBtnDisable" @click="updateXraySetting">{{ i18n "pages.xray.save" }}</a-button>
                                     <a-button type="danger" :disabled="!saveBtnDisable" @click="restartXray">{{ i18n "pages.xray.restart" }}</a-button>
+                                    <a-popover v-if="restartResult"
+                                        :overlay-class-name="themeSwitcher.currentTheme">
+                                        <span slot="title" style="font-size: 12pt">Error in running xray-core</span>
+                                        <template slot="content">
+                                            <p style="max-width: 400px" v-for="line in restartResult.split('\n')">[[ line ]]</p>
+                                        </template>
+                                        <a-icon type="question-circle"></a-icon>
+                                    </a-popover>
                                 </a-space>
                             </a-col>
                             <a-col :xs="24" :sm="16">
@@ -143,7 +156,7 @@
                                         <a-alert type="warning" style="text-align: center;">
                                             <template slot="message">
                                                 <a-icon type="exclamation-circle" theme="filled" style="color: #FFA031"></a-icon>
-                                                {{ i18n "pages.xray.generalConfigsDesc" }}
+                                                {{ i18n "pages.xray.blockConfigsDesc" }}
                                             </template>
                                         </a-alert>
                                     </a-row>
@@ -411,7 +424,7 @@
         { title: "#", align: 'center', width: 15, scopedSlots: { customRender: 'action' } },
         { title: '{{ i18n "pages.xray.rules.source"}}', children: [
             { title: 'IP', dataIndex: "source", align: 'center', width: 20, ellipsis: true },
-            { title: 'port', dataIndex: 'sourcePort', align: 'center', width: 10, ellipsis: true } ]},
+            { title: 'Port', dataIndex: 'sourcePort', align: 'center', width: 10, ellipsis: true } ]},
         { title: '{{ i18n "pages.inbounds.network"}}', children: [
             { title: 'L4', dataIndex: 'network', align: 'center', width: 10 },
             { title: 'Protocol', dataIndex: 'protocol', align: 'center', width: 10, ellipsis: true },
@@ -422,7 +435,7 @@
             { title: 'Port', dataIndex: 'port', align: 'center', width: 10, ellipsis: true }]},
         { title: '{{ i18n "pages.xray.rules.inbound"}}', children: [
             { title: 'Inbound Tag', dataIndex: 'inboundTag', align: 'center', width: 20, ellipsis: true },
-            { title: 'User email', dataIndex: 'user', align: 'center', width: 20, ellipsis: true }]},
+            { title: 'Client Email', dataIndex: 'user', align: 'center', width: 20, ellipsis: true }]},
         { title: '{{ i18n "pages.xray.rules.outbound"}}', dataIndex: 'outboundTag', align: 'center', width: 20 },
     ];
 
@@ -459,6 +472,7 @@
             xraySetting: '',
             inboundTags: [],
             saveBtnDisable: true,
+            restartResult: '',
             showAlert: false,
             isMobile: window.innerWidth <= 768,
             advSettings: 'xraySetting',
@@ -503,13 +517,13 @@
                 ips: {
                     local: ["geoip:private"],
                     cn: ["geoip:cn"],
-                    ir: ["geoip:ir"],
+                    ir: ["ext:geoip_IR.dat:ir","ext:geoip_IR.dat:arvancloud","ext:geoip_IR.dat:derakcloud","ext:geoip_IR.dat:iranserver"],
                     ru: ["geoip:ru"],
                 },
                 domains: {
                     ads: [
                         "geosite:category-ads-all",
-                        "ext:iran.dat:ads"
+                        "ext:geosite_IR.dat:category-ads-all"
                     ],
                     google: ["geosite:google"],
                     netflix: ["geosite:netflix"],
@@ -523,9 +537,8 @@
                     ],
                     ir: [
                         "regexp:.*\\.ir$",
-                        "ext:iran.dat:ir",
-                        "ext:iran.dat:other",
-                        "geosite:category-ir"
+                        "regexp:.*\\.xn--mgba3a4f16a$",  // .ایران
+                        "ext:geosite_IR.dat:ir"  // have rules to bypass all .ir domains.
                     ]
                 },
                 familyProtectDNS: {
@@ -567,7 +580,18 @@
             async restartXray() {
                 this.loading(true);
                 const msg = await HttpUtil.post("server/restartXrayService");
+                if (msg.success) {
+                    await PromiseUtil.sleep(500);
+                    await this.getXrayResult();
+                }
                 this.loading(false);
+            },
+            async getXrayResult() {
+                const msg = await HttpUtil.get("/xui/xray/getXrayResult");
+                    if(msg.success){
+                        this.restartResult=msg.obj;
+                        if(msg.obj.length > 1) Vue.prototype.$message.error(msg.obj);
+                    }
             },
             async resetXrayConfigToDefault() {
                 this.loading(true);
@@ -758,17 +782,27 @@
                     confirm: (reverse, rules) => {
                         reverseModal.loading();
                         if(reverse.tag.length > 0){
-                            oldtag = this.reverseData[index].tag;
-                            this.deleteReverse(index);
+                            oldData = this.reverseData[index];
                             newTemplateSettings = this.templateSettings;
-                            if(newTemplateSettings.reverse == undefined) newTemplateSettings.reverse = {};
-                            if(newTemplateSettings.reverse[reverse.type+'s']  == undefined) newTemplateSettings.reverse[reverse.type+'s'] = [];
-                            newTemplateSettings.reverse[reverse.type+'s'].push({ tag: reverse.tag, domain: reverse.domain });
+                            oldReverseIndex = newTemplateSettings.reverse[oldData.type+'s'].findIndex(rs => rs.tag == oldData.tag);
+                            oldRuleIndex0 = oldRules.length>0 ? newTemplateSettings.routing.rules.findIndex(r => JSON.stringify(r) == JSON.stringify(oldRules[0])) : -1;
+                            oldRuleIndex1 = oldRules.length==2 ? newTemplateSettings.routing.rules.findIndex(r => JSON.stringify(r) == JSON.stringify(oldRules[1])) : -1;
+                            if(oldData.type == reverse.type){
+                                newTemplateSettings.reverse[oldData.type + 's'][oldReverseIndex] = { tag: reverse.tag, domain: reverse.domain };
+                            } else {
+                                newTemplateSettings.reverse[oldData.type+'s'].splice(oldReverseIndex,1);
+                                // delete empty object
+                                if(newTemplateSettings.reverse[oldData.type+'s'].length == 0) Reflect.deleteProperty(newTemplateSettings.reverse, oldData.type+'s');
+                                // add other type of reverse if it is not exist
+                                if(!newTemplateSettings.reverse[reverse.type+'s']) newTemplateSettings.reverse[reverse.type+'s'] = [];
+                                newTemplateSettings.reverse[reverse.type+'s'].push({ tag: reverse.tag, domain: reverse.domain });
+                            }
                             this.templateSettings = newTemplateSettings;
 
                             // Adjust Rules
-                            newRules = this.templateSettings.routing.rules.filter(r => r.outboundTag != oldtag && (r.inboundTag && !r.inboundTag.includes(oldtag)));
-                            newRules.push(...rules)
+                            newRules = this.templateSettings.routing.rules;
+                            oldRuleIndex0 != -1 ? newRules[oldRuleIndex0] = rules[0] : newRules.push(rules[0]);
+                            oldRuleIndex1 != -1 ? newRules[oldRuleIndex1] = rules[1] : newRules.push(rules[1]);
                             this.routingRuleSettings = JSON.stringify(newRules);
                         }
                         reverseModal.close();
@@ -783,10 +817,17 @@
                 realIndex = reverseTypeObj.findIndex(r => r.tag==oldData.tag && r.domain==oldData.domain);
                 newTemplateSettings.reverse[oldData.type+'s'].splice(realIndex,1);
 
+                // delete empty objects
                 if(reverseTypeObj.length == 0) Reflect.deleteProperty(newTemplateSettings.reverse, oldData.type+'s');
                 if(Object.keys(newTemplateSettings.reverse).length === 0) Reflect.deleteProperty(newTemplateSettings, 'reverse');
 
-                newRules = newTemplateSettings.routing.rules.filter(r => r.outboundTag != oldData.tag && (r.inboundTag && !r.inboundTag.includes(oldData.tag)));
+                // delete related routing rules
+                newRules = newTemplateSettings.routing.rules;
+                if(oldData.type == "bridge"){
+                    newRules = newTemplateSettings.routing.rules.filter(r => !( r.inboundTag && r.inboundTag.length == 1 && r.inboundTag[0] == oldData.tag));
+                } else if(oldData.type == "portal"){
+                    newRules = newTemplateSettings.routing.rules.filter(r => r.outboundTag != oldData.tag);
+                }
                 newTemplateSettings.routing.rules = newRules;
                 
                 this.templateSettings = newTemplateSettings;
@@ -838,6 +879,7 @@
                 this.showAlert = true;
             }
             await this.getXraySetting();
+            await this.getXrayResult();
             while (true) {
                 await PromiseUtil.sleep(1000);
                 this.saveBtnDisable = this.oldXraySetting === this.xraySetting;

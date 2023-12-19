@@ -476,7 +476,7 @@ class Outbound extends CommonClass {
         if(data.length !=2) return null;
         switch(data[0].toLowerCase()){
             case Protocols.VMess:
-                return this.fromVmessLink(JSON.parse(atob(data[1])));
+                return this.fromVmessLink(JSON.parse(Base64.decode(data[1])));
             case Protocols.VLESS:
             case Protocols.Trojan:
             case 'ss':
@@ -493,8 +493,8 @@ class Outbound extends CommonClass {
         if (network === 'tcp') {
             stream.tcp = new TcpStreamSettings(
                 json.type,
-                json.host ? json.host.split(','): [],
-                json.path ? json.path.split(','): []);
+                json.host ?? '',
+                json.path ?? '');
         } else if (network === 'kcp') {
             stream.kcp = new KcpStreamSettings();
             stream.type = json.type;
@@ -505,7 +505,7 @@ class Outbound extends CommonClass {
             stream.network = 'http'
             stream.http = new HttpStreamSettings(
                 json.path,
-                json.host ? json.host.split(',') : []);
+                json.host);
         } else if (network === 'quic') {
             stream.quic = new QuicStreamSettings(
                 json.host ? json.host : 'none',
@@ -570,7 +570,7 @@ class Outbound extends CommonClass {
             let sni=url.searchParams.get('sni') ?? '';
             let sid=url.searchParams.get('sid') ?? '';
             let spx=url.searchParams.get('spx') ?? '';
-            stream.tls = new RealityStreamSettings(pbk, fp, sni, sid, spx);
+            stream.reality = new RealityStreamSettings(pbk, fp, sni, sid, spx);
         }
 
         let data = link.split('?');
@@ -839,12 +839,12 @@ Outbound.ShadowsocksSettings = class extends CommonClass {
     }
 };
 Outbound.SocksSettings = class extends CommonClass {
-    constructor(address, port, user, password) {
+    constructor(address, port, user, pass) {
         super();
         this.address = address;
         this.port = port;
         this.user = user;
-        this.password = password;
+        this.pass = pass;
     }
 
     static fromJson(json={}) {
@@ -854,7 +854,7 @@ Outbound.SocksSettings = class extends CommonClass {
             servers[0].address,
             servers[0].port,
             ObjectUtil.isArrEmpty(servers[0].users) ? '' : servers[0].users[0].user,
-            ObjectUtil.isArrEmpty(servers[0].password) ? '' : servers[0].users[0].password,
+            ObjectUtil.isArrEmpty(servers[0].pass) ? '' : servers[0].users[0].pass,
         );
     }
 
@@ -863,18 +863,18 @@ Outbound.SocksSettings = class extends CommonClass {
             servers: [{
                 address: this.address,
                 port: this.port,
-                users: ObjectUtil.isEmpty(this.user) ? [] : [{user: this.user, password: this.password}],
+                users: ObjectUtil.isEmpty(this.user) ? [] : [{user: this.user, pass: this.pass}],
             }],
         };
     }
 };
 Outbound.HttpSettings = class extends CommonClass {
-    constructor(address, port, user, password) {
+    constructor(address, port, user, pass) {
         super();
         this.address = address;
         this.port = port;
         this.user = user;
-        this.password = password;
+        this.pass = pass;
     }
 
     static fromJson(json={}) {
@@ -884,7 +884,7 @@ Outbound.HttpSettings = class extends CommonClass {
             servers[0].address,
             servers[0].port,
             ObjectUtil.isArrEmpty(servers[0].users) ? '' : servers[0].users[0].user,
-            ObjectUtil.isArrEmpty(servers[0].password) ? '' : servers[0].users[0].password,
+            ObjectUtil.isArrEmpty(servers[0].pass) ? '' : servers[0].users[0].pass,
         );
     }
 
@@ -893,7 +893,7 @@ Outbound.HttpSettings = class extends CommonClass {
             servers: [{
                 address: this.address,
                 port: this.port,
-                users: ObjectUtil.isEmpty(this.user) ? [] : [{user: this.user, password: this.password}],
+                users: ObjectUtil.isEmpty(this.user) ? [] : [{user: this.user, pass: this.pass}],
             }],
         };
     }

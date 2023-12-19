@@ -43,6 +43,10 @@
         0%, 50%, 100%   { transform: scale(1);  opacity:  1; }
         10%             { transform: scale(1.5); opacity: .2; }
     }
+    .info-large-tag {
+        max-width: 200px;
+        overflow: hidden;
+    }
 </style>
 
 <body>
@@ -160,9 +164,9 @@
                                 </a-col>
                             </a-row>
                         </div>
-                        <div style="display: flex; align-items: center; justify-content: flex-start;">
+                        <div :style="isMobile ? '' : 'display: flex; align-items: center; justify-content: flex-start;'">
                             <a-switch v-model="enableFilter"
-                                style="margin-right: .5rem;"
+                                :style="isMobile ? 'margin-bottom: .5rem; display: flex;' : 'margin-right: .5rem;'"
                                 @change="toggleFilter">
                                 <a-icon slot="checkedChildren" type="search"></a-icon>
                                 <a-icon slot="unCheckedChildren" type="filter"></a-icon>
@@ -423,7 +427,7 @@
                                     :columns="isMobile ? innerMobileColumns : innerColumns"
                                     :data-source="getInboundClients(record)"
                                     :pagination=pagination(getInboundClients(record))
-                                    :style="isMobile ? 'margin: -16px -5px -17px;' : 'margin-left: 10px;'">
+                                    style="margin: -12px -6px -13px;">
                                     {{template "client_table"}}
                                 </a-table>
                             </template>
@@ -517,9 +521,9 @@
         { title: '{{ i18n "pages.inbounds.operate" }}', width: 50, scopedSlots: { customRender: 'actions' } },
         { title: '{{ i18n "pages.inbounds.enable" }}', width: 20, scopedSlots: { customRender: 'enable' } },
         { title: '{{ i18n "online" }}', width: 20, scopedSlots: { customRender: 'online' } },
-        { title: '{{ i18n "pages.inbounds.client" }}', width: 80, scopedSlots: { customRender: 'client' } },
+        { title: '{{ i18n "pages.inbounds.client" }}', width: 70, scopedSlots: { customRender: 'client' } },
         { title: '{{ i18n "pages.inbounds.traffic" }}', width: 80, align: 'center', scopedSlots: { customRender: 'traffic' } },
-        { title: '{{ i18n "pages.inbounds.expireDate" }}', width: 80, align: 'center', scopedSlots: { customRender: 'expiryTime' } },
+        { title: '{{ i18n "pages.inbounds.expireDate" }}', width: 70, align: 'center', scopedSlots: { customRender: 'expiryTime' } },
     ];
 
     const innerMobileColumns = [
@@ -554,6 +558,7 @@
                 enable : false,
                 subURI : ''
             },
+            remarkModel: '-ieo',
             tgBotEnable: false,
             showAlert: false,
             pageSize: 0,
@@ -599,6 +604,7 @@
                         subURI: subURI
                     };
                     this.pageSize = pageSize;
+                    this.remarkModel = remarkModel;
                 }
             },
             setInbounds(dbInbounds) {
@@ -942,7 +948,7 @@
             resetTraffic(dbInboundId) {
                 dbInbound = this.dbInbounds.find(row => row.id === dbInboundId);
                 this.$confirm({
-                    title: '{{ i18n "pages.inbounds.resetTraffic"}}',
+                    title: '{{ i18n "pages.inbounds.resetTraffic"}}' + ' #' + dbInboundId,
                     content: '{{ i18n "pages.inbounds.resetTrafficContent"}}',
                     class: themeSwitcher.currentTheme,
                     okText: '{{ i18n "reset"}}',
@@ -957,7 +963,7 @@
             },
             delInbound(dbInboundId) {
                 this.$confirm({
-                    title: '{{ i18n "pages.inbounds.deleteInbound"}}',
+                    title: '{{ i18n "pages.inbounds.deleteInbound"}}' + ' #' + dbInboundId,
                     content: '{{ i18n "pages.inbounds.deleteInboundContent"}}',
                     class: themeSwitcher.currentTheme,
                     okText: '{{ i18n "delete"}}',
@@ -970,7 +976,7 @@
                 clientId = this.getClientId(dbInbound.protocol, client);
                 if (confirmation){
                     this.$confirm({
-                        title: '{{ i18n "pages.inbounds.deleteClient"}}',
+                        title: '{{ i18n "pages.inbounds.deleteClient"}}' + ' ' + client.email,
                         content: '{{ i18n "pages.inbounds.deleteClientContent"}}',
                         class: themeSwitcher.currentTheme,
                         okText: '{{ i18n "delete"}}',
@@ -1051,7 +1057,7 @@
             resetClientTraffic(client, dbInboundId, confirmation = true) {
                 if (confirmation){
                     this.$confirm({
-                        title: '{{ i18n "pages.inbounds.resetTraffic"}}',
+                        title: '{{ i18n "pages.inbounds.resetTraffic"}}' + ' ' + client.email,
                         content: '{{ i18n "pages.inbounds.resetTrafficContent"}}',
                         class: themeSwitcher.currentTheme,
                         okText: '{{ i18n "reset"}}',
@@ -1087,7 +1093,7 @@
                     title: '{{ i18n "pages.inbounds.delDepletedClientsTitle"}}',
                     content: '{{ i18n "pages.inbounds.delDepletedClientsContent"}}',
                     class: themeSwitcher.currentTheme,
-                    okText: '{{ i18n "reset"}}',
+                    okText: '{{ i18n "delete"}}',
                     cancelText: '{{ i18n "cancel"}}',
                     onOk: () => this.submit('/xui/inbound/delDepletedClients/' + dbInboundId),
                 })
@@ -1173,7 +1179,7 @@
             inboundLinks(dbInboundId) {
                 dbInbound = this.dbInbounds.find(row => row.id === dbInboundId);
                 newDbInbound = this.checkFallback(dbInbound);
-                txtModal.show('{{ i18n "pages.inbounds.export"}}', newDbInbound.genInboundLinks, newDbInbound.remark);
+                txtModal.show('{{ i18n "pages.inbounds.export"}}', newDbInbound.genInboundLinks(this.remarkModel), newDbInbound.remark);
             },
             importInbound() {
                 promptModal.open({
@@ -1190,7 +1196,7 @@
 			exportAllLinks() {
                 let copyText = [];
                 for (const dbInbound of this.dbInbounds) {
-                    copyText.push(dbInbound.genInboundLinks);
+                    copyText.push(dbInbound.genInboundLinks(this.remarkModel));
                 }
                 txtModal.show('{{ i18n "pages.inbounds.export"}}', copyText.join('\r\n'), 'All-Inbounds');
             },
