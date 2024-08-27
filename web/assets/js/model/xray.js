@@ -84,6 +84,7 @@ Object.freeze(SSMethods);
 Object.freeze(TLS_FLOW_CONTROL);
 Object.freeze(TLS_VERSION_OPTION);
 Object.freeze(TLS_CIPHER_OPTION);
+Object.freeze(UTLS_FINGERPRINT);
 Object.freeze(ALPN_OPTION);
 Object.freeze(SNIFFING_OPTION);
 
@@ -475,6 +476,44 @@ class HttpUpgradeStreamSettings extends XrayCommonClass {
         };
     }
 }
+class SplitHTTPStreamSettings extends XrayCommonClass {
+    constructor(path='/', host='', headers=[] , maxUploadSize= 1000000, maxConcurrentUploads= 10) {
+        super();
+        this.path = path;
+        this.host = host;
+        this.headers = headers;
+        this.maxUploadSize = maxUploadSize;
+        this.maxConcurrentUploads = maxConcurrentUploads;
+    }
+
+    addHeader(name, value) {
+        this.headers.push({ name: name, value: value });
+    }
+
+    removeHeader(index) {
+        this.headers.splice(index, 1);
+    }
+
+    static fromJson(json={}) {
+        return new SplitHTTPStreamSettings(
+            json.path,
+            json.host,
+            XrayCommonClass.toHeaders(json.headers),
+            json.maxUploadSize,
+            json.maxConcurrentUploads,
+        );
+    }
+
+    toJson() {
+        return {
+            path: this.path,
+            host: this.host,
+            headers: XrayCommonClass.toV2Headers(this.headers, false),
+            maxUploadSize: this.maxUploadSize,
+            maxConcurrentUploads: this.maxConcurrentUploads,
+        };
+    }
+}
 
 class TlsStreamSettings extends XrayCommonClass {
     constructor(serverName='',
@@ -729,6 +768,7 @@ class StreamSettings extends XrayCommonClass {
                 quicSettings=new QuicStreamSettings(),
                 grpcSettings=new GrpcStreamSettings(),
                 httpupgradeSettings=new HttpUpgradeStreamSettings(),
+                splithttpSettings=new SplitHTTPStreamSettings(),
                 sockopt = undefined,
                 ) {
         super();
@@ -744,6 +784,7 @@ class StreamSettings extends XrayCommonClass {
         this.quic = quicSettings;
         this.grpc = grpcSettings;
         this.httpupgrade = httpupgradeSettings;
+        this.splithttp = splithttpSettings;
         this.sockopt = sockopt;
     }
 
@@ -793,6 +834,7 @@ class StreamSettings extends XrayCommonClass {
             QuicStreamSettings.fromJson(json.quicSettings),
             GrpcStreamSettings.fromJson(json.grpcSettings),
             HttpUpgradeStreamSettings.fromJson(json.httpupgradeSettings),
+            SplitHTTPStreamSettings.fromJson(json.splithttpSettings),
             SockoptStreamSettings.fromJson(json.sockopt),
         );
     }
@@ -812,16 +854,23 @@ class StreamSettings extends XrayCommonClass {
             quicSettings: network === 'quic' ? this.quic.toJson() : undefined,
             grpcSettings: network === 'grpc' ? this.grpc.toJson() : undefined,
             httpupgradeSettings: network === 'httpupgrade' ? this.httpupgrade.toJson() : undefined,
+            splithttpSettings: network === 'splithttp' ? this.splithttp.toJson() : undefined,
             sockopt: this.sockopt != undefined ? this.sockopt.toJson() : undefined,
         };
     }
 }
 
 class Sniffing extends XrayCommonClass {
-    constructor(enabled=true, destOverride=['http', 'tls', 'quic', 'fakedns']) {
+    constructor(
+        enabled=false,
+        destOverride=['http', 'tls', 'quic', 'fakedns'],
+        metadataOnly=false,
+        routeOnly=false) {
         super();
         this.enabled = enabled;
         this.destOverride = destOverride;
+        this.metadataOnly = metadataOnly;
+        this.routeOnly = routeOnly;
     }
 
     static fromJson(json={}) {
@@ -834,6 +883,8 @@ class Sniffing extends XrayCommonClass {
         return new Sniffing(
             !!json.enabled,
             destOverride,
+            json.metadataOnly,
+            json.routeOnly,
         );
     }
 }
@@ -919,6 +970,10 @@ class Inbound extends XrayCommonClass {
     get isHttpupgrade() {
         return this.network === "httpupgrade";
     }
+    
+    get isSplithttp() {
+        return this.network === "splithttp";
+    }
 
     // Shadowsocks
     get method() {
@@ -959,7 +1014,9 @@ class Inbound extends XrayCommonClass {
         } else if (this.isWs) {
             return this.stream.ws.host?.length>0 ? this.stream.ws.host : this.getHeader(this.stream.ws, 'host');
         } else if (this.isHttpupgrade) {
-            return this.stream.httpupgrade.host;
+            return this.stream.httpupgrade.host?.length>0 ? this.stream.httpupgrade.host : this.getHeader(this.stream.httpupgrade, 'host');
+        } else if (this.isSplithttp) {
+            return this.stream.splithttp.host?.length>0 ? this.stream.splithttp.host : this.getHeader(this.stream.splithttp, 'host');
         }
         return null;
     }
@@ -973,6 +1030,8 @@ class Inbound extends XrayCommonClass {
             return this.stream.http.path;
         } else if (this.isHttpupgrade) {
             return this.stream.httpupgrade.path;
+        } else if (this.isSplithttp) {
+            return this.stream.splithttp.path;
         }
         return null;
     }
@@ -1008,7 +1067,7 @@ class Inbound extends XrayCommonClass {
 
     canEnableTls() {
         if(![Protocols.VMESS, Protocols.VLESS, Protocols.TROJAN, Protocols.SHADOWSOCKS].includes(this.protocol)) return false;
-        return ["tcp", "ws", "http", "quic", "grpc", "httpupgrade"].includes(this.network);
+        return ["tcp", "ws", "http", "quic", "grpc", "httpupgrade" , "splithttp"].includes(this.network);
     }
 
     //this is used for xtls-rprx-vision
@@ -1088,7 +1147,11 @@ class Inbound extends XrayCommonClass {
         } else if (network === 'httpupgrade') {
             const httpupgrade = this.stream.httpupgrade;
             obj.path = httpupgrade.path;
-            obj.host = httpupgrade.host;
+            obj.host = httpupgrade.host?.length>0 ? httpupgrade.host : this.getHeader(httpupgrade, 'host');
+        } else if (network === 'splithttp') {
+            const splithttp = this.stream.splithttp;
+            obj.path = splithttp.path;
+            obj.host = splithttp.host?.length>0 ? splithttp.host : this.getHeader(splithttp, 'host');
         }
 
         if (security === 'tls') {
@@ -1159,10 +1222,15 @@ class Inbound extends XrayCommonClass {
                 }
                 break;
             case "httpupgrade":
-                const httpupgrade = this.stream.httpupgrade;
-                params.set("path", httpupgrade.path);
-                params.set("host", httpupgrade.host);
-            break;
+                    const httpupgrade = this.stream.httpupgrade;
+                    params.set("path", httpupgrade.path);
+                    params.set("host", httpupgrade.host?.length>0 ? httpupgrade.host : this.getHeader(httpupgrade, 'host'));
+                break;
+            case "splithttp":
+                    const splithttp = this.stream.splithttp;
+                    params.set("path", splithttp.path);
+                    params.set("host", splithttp.host?.length>0 ? splithttp.host : this.getHeader(splithttp, 'host'));
+                break;
         }
 
         if (security === 'tls') {
@@ -1263,10 +1331,15 @@ class Inbound extends XrayCommonClass {
                 }
                 break;
             case "httpupgrade":
-                const httpupgrade = this.stream.httpupgrade;
-                params.set("path", httpupgrade.path);
-                params.set("host", httpupgrade.host);
-            break;
+                    const httpupgrade = this.stream.httpupgrade;
+                    params.set("path", httpupgrade.path);
+                    params.set("host", httpupgrade.host?.length>0 ? httpupgrade.host : this.getHeader(httpupgrade, 'host'));
+                break;
+            case "splithttp":
+                    const splithttp = this.stream.splithttp;
+                    params.set("path", splithttp.path);
+                    params.set("host", splithttp.host?.length>0 ? splithttp.host : this.getHeader(splithttp, 'host'));
+                break;
         }
 
         if (security === 'tls') {
@@ -1346,10 +1419,15 @@ class Inbound extends XrayCommonClass {
                 }
                 break;
             case "httpupgrade":
-                const httpupgrade = this.stream.httpupgrade;
-                params.set("path", httpupgrade.path);
-                params.set("host", httpupgrade.host);
-            break;
+                    const httpupgrade = this.stream.httpupgrade;
+                    params.set("path", httpupgrade.path);
+                    params.set("host", httpupgrade.host?.length>0 ? httpupgrade.host : this.getHeader(httpupgrade, 'host'));
+                break;
+            case "splithttp":
+                    const splithttp = this.stream.splithttp;
+                    params.set("path", splithttp.path);
+                    params.set("host", splithttp.host?.length>0 ? splithttp.host : this.getHeader(splithttp, 'host'));
+                break;
         }
 
         if (security === 'tls') {
@@ -2013,12 +2091,13 @@ Inbound.ShadowsocksSettings.Shadowsocks = class extends XrayCommonClass {
 };
 
 Inbound.DokodemoSettings = class extends Inbound.Settings {
-    constructor(protocol, address, port, network='tcp,udp', followRedirect=false) {
+    constructor(protocol, address, port, network='tcp,udp', followRedirect=false, timeout=0) {
         super(protocol);
         this.address = address;
         this.port = port;
         this.network = network;
         this.followRedirect = followRedirect;
+        this.timeout = timeout;
     }
 
     static fromJson(json={}) {
@@ -2028,6 +2107,7 @@ Inbound.DokodemoSettings = class extends Inbound.Settings {
             json.port,
             json.network,
             json.followRedirect,
+            json.timeout,
         );
     }
 
@@ -2037,6 +2117,7 @@ Inbound.DokodemoSettings = class extends Inbound.Settings {
             port: this.port,
             network: this.network,
             followRedirect: this.followRedirect,
+            timeout: this.timeout,
         };
     }
 };

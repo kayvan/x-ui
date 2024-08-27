@@ -188,10 +188,18 @@ docker build -t x-ui .
 
 ## Recommended OS
 
+- Ubuntu 20.04+
+- Debian 11+
 - CentOS 8+
-- Ubuntu 20+
-- Debian 10+
 - Fedora 36+
+- Arch Linux
+- Parch Linux
+- Manjaro
+- Armbian
+- AlmaLinux 9+
+- Rocky Linux 9+
+- Oracle Linux 8+
+- OpenSUSE Tubleweed
 
 ## Preview
 
@@ -224,6 +232,7 @@ docker build -t x-ui .
 | `POST` | `"/:id/delClient/:clientId"`       | Delete client by clientId\*               |
 | `POST` | `"/updateClient/:clientId"`        | Update client by clientId\*               |
 | `GET`  | `"/getClientTraffics/:email"`      | Get client's traffic                      |
+| `GET`  | `"/getClientTrafficsById/:id"`     | Get client's traffic By ID                |
 | `POST` | `"/:id/resetClientTraffic/:email"` | Reset client's traffic                    |
 | `POST` | `"/resetAllTraffics"`              | Reset traffics of all inbounds            |
 | `POST` | `"/resetAllClientTraffics/:id"`    | Reset inbound clients traffics (-1: all)  |

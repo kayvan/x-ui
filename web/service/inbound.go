@@ -574,7 +574,7 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 		return false, err
 	}
 
-	inerfaceClients := settings["clients"].([]interface{})
+	interfaceClients := settings["clients"].([]interface{})
 
 	oldInbound, err := s.GetInbound(data.Id)
 	if err != nil {
@@ -629,7 +629,7 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 		return false, err
 	}
 	settingsClients := oldSettings["clients"].([]interface{})
-	settingsClients[clientIndex] = inerfaceClients[0]
+	settingsClients[clientIndex] = interfaceClients[0]
 	oldSettings["clients"] = settingsClients
 
 	newSettings, err := json.MarshalIndent(oldSettings, "", "  ")
@@ -667,8 +667,12 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 	needRestart := false
 	if len(oldEmail) > 0 {
 		s.xrayApi.Init(p.GetAPIPort())
-		if s.xrayApi.RemoveUser(oldInbound.Tag, oldEmail) == nil {
+		err1 := s.xrayApi.RemoveUser(oldInbound.Tag, oldEmail)
+		if err1 == nil {
 			logger.Debug("Old client deleted by api:", clients[0].Email)
+		} else {
+			logger.Debug("Error in deleting client by api:", err1)
+			needRestart = true
 		}
 		if clients[0].Enable {
 			cipher := ""
@@ -1288,6 +1292,25 @@ func (s *InboundService) GetClientTrafficByEmail(email string) (traffic *xray.Cl
 	return nil, nil
 }
 
+func (s *InboundService) GetClientTrafficByID(id string) ([]xray.ClientTraffic, error)  {
+	db := database.GetDB() 
+	var traffics []xray.ClientTraffic
+
+	err := db.Model(xray.ClientTraffic{}).Where(`email IN(
+		SELECT JSON_EXTRACT(client.value, '$.email') as email
+		FROM inbounds,
+	  	JSON_EACH(JSON_EXTRACT(inbounds.settings, '$.clients')) AS client
+		WHERE
+	  	JSON_EXTRACT(client.value, '$.id') in (?)
+		)`, id).Find(&traffics).Error
+
+	if err != nil {
+		logger.Debug(err)
+		return nil, err
+	}
+	return traffics, err
+}
+
 func (s *InboundService) SearchClientTraffic(query string) (traffic *xray.ClientTraffic, err error) {
 	db := database.GetDB()
 	inbound := &model.Inbound{}
@@ -1464,6 +1487,6 @@ func (s *InboundService) MigrateDB() {
 	s.MigrationRemoveOrphanedTraffics()
 }
 
-func (s *InboundService) GetOnlineClinets() []string {
+func (s *InboundService) GetOnlineClients() []string {
 	return p.GetOnlineClients()
 }
