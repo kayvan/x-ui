@@ -3,7 +3,7 @@ package xray
 import (
 	"bytes"
 
-	"x-ui/util/json_util"
+	"github.com/alireza0/x-ui/util/json_util"
 )
 
 type Config struct {
@@ -20,6 +20,7 @@ type Config struct {
 	FakeDNS          json_util.RawMessage `json:"fakedns"`
 	Observatory      json_util.RawMessage `json:"observatory"`
 	BurstObservatory json_util.RawMessage `json:"burstObservatory"`
+	Metrics          json_util.RawMessage `json:"metrics"`
 }
 
 func (c *Config) Equals(other *Config) bool {
@@ -59,6 +60,9 @@ func (c *Config) Equals(other *Config) bool {
 		return false
 	}
 	if !bytes.Equal(c.FakeDNS, other.FakeDNS) {
+		return false
+	}
+	if !bytes.Equal(c.Metrics, other.Metrics) {
 		return false
 	}
 	return true

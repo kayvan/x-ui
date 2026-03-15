@@ -123,6 +123,7 @@
 "remark" = "备注"
 "protocol" = "协议"
 "port" = "端口"
+"portMap" = "端口映射"
 "traffic" = "流量"
 "details" = "详细信息"
 "transportConfig" = "传输配置"
@@ -415,6 +416,12 @@
 "endpoint" = "终点"
 "psk" = "共享密钥"
 "domainStrategy" = "域策略"
+
+[pages.xray.tun]
+"nameDesc" = "TUN 接口的名称。默认值为 'xrayN', 其中 N 是接口的编号。"
+"mtuDesc" = "最大传输单元。数据包的最大大小。默认值为 1500"
+"userLevel" = "用户级别"
+"userLevelDesc" = "通过此入站的所有连接都将使用此用户级别。默认值为 0"
 
 [pages.xray.dns]
 "enable" = "启用 DNS"
