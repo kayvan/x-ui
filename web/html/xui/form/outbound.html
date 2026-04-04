@@ -529,12 +529,9 @@
                 <a-select-option value="header-wechat">Header WeChat Video</a-select-option>
                 <a-select-option value="header-wireguard">Header WireGuard</a-select-option>
                 <a-select-option value="mkcp-original">mKCP Original</a-select-option>
+                <a-select-option value="xdns">xDNS (Experimental)</a-select-option>
+                </a-select-option>
             </template>
-            <a-select-option
-                v-if="['tcp', 'ws', 'httpupgrade', 'xhttp'].includes(outbound.stream.network)"
-                value="xdns">
-                xDNS (Experimental)
-            </a-select-option>
         </a-select>
         </a-form-item>
         <a-form-item label='Password'

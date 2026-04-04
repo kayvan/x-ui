@@ -4,7 +4,7 @@
     :wrapper-col="{ md: {span:14} }">
     <a-form-item label="UDP Masks">
         <a-button icon="plus" type="primary" size="small"
-            @click="inbound.stream.addUdpMask(inbound.stream.network === 'kcp' ? 'mkcp-aes128gcm' : 'xdns')"></a-button>
+            @click="inbound.stream.addUdpMask('mkcp-aes128gcm')"></a-button>
     </a-form-item>
     <template
         v-if="inbound.stream.finalmask.udp && inbound.stream.finalmask.udp.length > 0">
@@ -20,37 +20,16 @@
                 <a-select v-model="mask.type"
                     @change="(type) => mask.settings = mask._getDefaultSettings(type, {})"
                     :dropdown-class-name="themeSwitcher.currentTheme">
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="mkcp-aes128gcm">
-                        mKCP AES-128-GCM</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-dns">
-                        Header DNS</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-dtls">
-                        Header DTLS 1.2</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-srtp">
-                        Header SRTP</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-utp">
-                        Header uTP</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-wechat">
-                        Header WeChat Video</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="header-wireguard">
-                        Header WireGuard</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="mkcp-original">
-                        mKCP Original</a-select-option>
-                    <a-select-option
-                        v-if="['tcp', 'ws', 'httpupgrade', 'xhttp'].includes(inbound.stream.network)"
-                        value="xdns">
-                        xDNS (Experimental)</a-select-option>
-                    <a-select-option v-if="inbound.stream.network === 'kcp'"
-                        value="xicmp">
-                        xICMP (Experimental)</a-select-option>
+                    <a-select-option value="mkcp-aes128gcm">mKCP AES-128-GCM</a-select-option>
+                    <a-select-option value="header-dns">Header DNS</a-select-option>
+                    <a-select-option value="header-dtls">Header DTLS 1.2</a-select-option>
+                    <a-select-option value="header-srtp">Header SRTP</a-select-option>
+                    <a-select-option value="header-utp">Header uTP</a-select-option>
+                    <a-select-option value="header-wechat">Header WeChat Video</a-select-option>
+                    <a-select-option value="header-wireguard">Header WireGuard</a-select-option>
+                    <a-select-option value="mkcp-original">mKCP Original</a-select-option>
+                    <a-select-option value="xdns">xDNS (Experimental)</a-select-option>
+                    <a-select-option value="xicmp">xICMP (Experimental)</a-select-option>
                 </a-select>
             </a-form-item>
             <a-form-item label='Password'

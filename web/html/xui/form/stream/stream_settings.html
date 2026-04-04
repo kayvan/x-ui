@@ -51,7 +51,7 @@
 
 <!-- finalmask - only for TCP, WS, HTTPUpgrade, XHTTP, mKCP -->
 <template
-    v-if="['tcp', 'ws', 'httpupgrade', 'xhttp', 'kcp'].includes(inbound.stream.network)">
+    v-if="inbound.stream.network === 'kcp'">
     {{template "form/streamFinalMask"}}
 </template>
 
