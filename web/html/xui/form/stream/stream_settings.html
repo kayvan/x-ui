@@ -49,9 +49,8 @@
     {{template "form/streamXHTTP"}}
 </template>
 
-<!-- finalmask - only for TCP, WS, HTTPUpgrade, XHTTP, mKCP -->
-<template
-    v-if="inbound.stream.network === 'kcp'">
+<!-- finalmask -->
+<template>
     {{template "form/streamFinalMask"}}
 </template>
 
