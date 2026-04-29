@@ -16,6 +16,7 @@ const (
 	Http        Protocol = "http"
 	Trojan      Protocol = "trojan"
 	Shadowsocks Protocol = "shadowsocks"
+	Hysteria    Protocol = "hysteria"
 )
 
 type User struct {
@@ -68,9 +69,10 @@ type Setting struct {
 }
 
 type Client struct {
-	ID         string `json:"id"`
-	Password   string `json:"password"`
-	Flow       string `json:"flow"`
+	ID         string `json:"id" omitEmpty:"true"`
+	Password   string `json:"password" omitEmpty:"true"`
+	Auth       string `json:"auth" omitEmpty:"true"`
+	Flow       string `json:"flow" omitEmpty:"true"`
 	Email      string `json:"email"`
 	TotalGB    int64  `json:"totalGB" form:"totalGB"`
 	ExpiryTime int64  `json:"expiryTime" form:"expiryTime"`

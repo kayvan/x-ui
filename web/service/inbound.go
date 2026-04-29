@@ -179,15 +179,20 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 
 	// Secure client ID
 	for _, client := range clients {
-		if inbound.Protocol == "trojan" {
+		switch inbound.Protocol {
+		case "trojan":
 			if client.Password == "" {
 				return inbound, false, common.NewError("empty client ID")
 			}
-		} else if inbound.Protocol == "shadowsocks" {
+		case "shadowsocks":
 			if client.Email == "" {
 				return inbound, false, common.NewError("empty client ID")
 			}
-		} else {
+		case "hysteria":
+			if client.Auth == "" {
+				return inbound, false, common.NewError("empty client ID")
+			}
+		default:
 			if client.ID == "" {
 				return inbound, false, common.NewError("empty client ID")
 			}
@@ -423,15 +428,20 @@ func (s *InboundService) AddInboundClient(data *model.Inbound) (bool, error) {
 
 	// Secure client ID
 	for _, client := range clients {
-		if oldInbound.Protocol == "trojan" {
+		switch oldInbound.Protocol {
+		case "trojan":
 			if client.Password == "" {
 				return false, common.NewError("empty client ID")
 			}
-		} else if oldInbound.Protocol == "shadowsocks" {
+		case "shadowsocks":
 			if client.Email == "" {
 				return false, common.NewError("empty client ID")
 			}
-		} else {
+		case "hysteria":
+			if client.Auth == "" {
+				return false, common.NewError("empty client ID")
+			}
+		default:
 			if client.ID == "" {
 				return false, common.NewError("empty client ID")
 			}
@@ -480,6 +490,7 @@ func (s *InboundService) AddInboundClient(data *model.Inbound) (bool, error) {
 				err1 := s.xrayApi.AddUser(string(oldInbound.Protocol), oldInbound.Tag, map[string]interface{}{
 					"email":    client.Email,
 					"id":       client.ID,
+					"auth":     client.Auth,
 					"flow":     client.Flow,
 					"password": client.Password,
 					"cipher":   cipher,
@@ -514,11 +525,13 @@ func (s *InboundService) DelInboundClient(inboundId int, clientId string) (bool,
 
 	email := ""
 	client_key := "id"
-	if oldInbound.Protocol == "trojan" {
+	switch oldInbound.Protocol {
+	case "trojan":
 		client_key = "password"
-	}
-	if oldInbound.Protocol == "shadowsocks" {
+	case "shadowsocks":
 		client_key = "email"
+	case "hysteria":
+		client_key = "auth"
 	}
 
 	interfaceClients := settings["clients"].([]interface{})
@@ -611,13 +624,17 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 	clientIndex := -1
 	for index, oldClient := range oldClients {
 		oldClientId := ""
-		if oldInbound.Protocol == "trojan" {
+		switch oldInbound.Protocol {
+		case "trojan":
 			oldClientId = oldClient.Password
 			newClientId = clients[0].Password
-		} else if oldInbound.Protocol == "shadowsocks" {
+		case "shadowsocks":
 			oldClientId = oldClient.Email
 			newClientId = clients[0].Email
-		} else {
+		case "hysteria":
+			oldClientId = oldClient.Auth
+			newClientId = clients[0].Auth
+		default:
 			oldClientId = oldClient.ID
 			newClientId = clients[0].ID
 		}
@@ -709,6 +726,7 @@ func (s *InboundService) UpdateInboundClient(data *model.Inbound, clientId strin
 				"email":    clients[0].Email,
 				"id":       clients[0].ID,
 				"flow":     clients[0].Flow,
+				"auth":     clients[0].Auth,
 				"password": clients[0].Password,
 				"cipher":   cipher,
 			})

@@ -3,6 +3,7 @@ const Protocols = {
     VLESS: 'vless',
     TROJAN: 'trojan',
     SHADOWSOCKS: 'shadowsocks',
+    HYSTERIA: 'hysteria',
     DOKODEMO: 'dokodemo-door',
     SOCKS: 'socks',
     HTTP: 'http',
@@ -589,6 +590,106 @@ class xHTTPStreamSettings extends XrayCommonClass {
     }
 }
 
+class HysteriaStreamSettings extends XrayCommonClass {
+    constructor(
+        protocol, 
+        version = 2, 
+        auth = '', 
+        udpIdleTimeout = 60, 
+        masquerade,
+    ) {
+        super(protocol);
+        this.version = version;
+        this.auth = auth;
+        this.udpIdleTimeout = udpIdleTimeout;
+        this.masquerade = masquerade;
+    }
+    
+    static fromJson(json = {}) {
+        return new HysteriaStreamSettings(
+            json.protocol,
+            json.version,
+            json.auth,
+            json.udpIdleTimeout,
+            json.masquerade ? HysteriaMasquerade.fromJson(json.masquerade) : undefined,
+        );
+    }
+
+    toJson() {
+        return {
+            protocol: this.protocol,
+            version: this.version,
+            auth: this.auth,
+            udpIdleTimeout: this.udpIdleTimeout,
+            masquerade: this.masqueradeSwitch ? this.masquerade.toJson() : undefined,
+        };
+    }
+
+    get masqueradeSwitch() {
+        return this.masquerade != undefined;
+    }
+
+    set masqueradeSwitch(value) {
+        this.masquerade = value ? new HysteriaMasquerade() : undefined;
+    }
+};
+
+class HysteriaMasquerade extends XrayCommonClass {
+    constructor(
+        type = 'proxy',
+        dir = '',
+        url = '',
+        rewriteHost = false,
+        insecure = false,
+        content = '',
+        headers = [],
+        statusCode = 0,
+    ) {
+        super();
+        this.type = type;
+        this.dir = dir;
+        this.url = url;
+        this.rewriteHost = rewriteHost;
+        this.insecure = insecure;
+        this.content = content;
+        this.headers = headers;
+        this.statusCode = statusCode;
+    }
+
+    addHeader(name, value) {
+        this.headers.push({ name: name, value: value });
+    }
+
+    removeHeader(index) {
+        this.headers.splice(index, 1);
+    }
+
+    static fromJson(json = {}) {
+        return new HysteriaMasquerade(
+            json.type,
+            json.dir,
+            json.url,
+            json.rewriteHost,
+            json.insecure,
+            json.content,
+            XrayCommonClass.toHeaders(json.headers),
+            json.statusCode,
+        );
+    }
+
+    toJson() {
+        return {
+            type: this.type,
+            dir: this.dir,
+            url: this.url,
+            rewriteHost: this.rewriteHost,
+            insecure: this.insecure,
+            content: this.content,
+            headers: XrayCommonClass.toV2Headers(this.headers, false),
+            statusCode: this.statusCode,
+        };
+    }
+};
 class TlsStreamSettings extends XrayCommonClass {
     constructor(
         serverName = '',
@@ -989,6 +1090,12 @@ class UdpMask extends XrayCommonClass {
             case 'header-wechat':
             case 'header-wireguard':
                 return {};
+            case 'header-custom':
+                return { client: [], server: [] };
+            case 'noise':
+                return { reset: 0, noise: [] };
+            case 'sudoku':
+                return { ascii: '', customTable: '', customTables: [], paddingMin: 0, paddingMax: 0 };
             default:
                 return settings;
         }
@@ -1038,6 +1145,7 @@ class StreamSettings extends XrayCommonClass {
         grpcSettings = new GrpcStreamSettings(),
         httpupgradeSettings = new HttpUpgradeStreamSettings(),
         xhttpSettings = new xHTTPStreamSettings(),
+        hysteriaSettings = new HysteriaStreamSettings(),
         finalmask = new FinalMaskStreamSettings(),
         sockopt = undefined,
     ) {
@@ -1053,6 +1161,7 @@ class StreamSettings extends XrayCommonClass {
         this.grpc = grpcSettings;
         this.httpupgrade = httpupgradeSettings;
         this.xhttp = xhttpSettings;
+        this.hysteria = hysteriaSettings;
         this.finalmask = finalmask;
         this.sockopt = sockopt;
     }
@@ -1117,6 +1226,7 @@ class StreamSettings extends XrayCommonClass {
             GrpcStreamSettings.fromJson(json.grpcSettings),
             HttpUpgradeStreamSettings.fromJson(json.httpupgradeSettings),
             xHTTPStreamSettings.fromJson(json.xhttpSettings),
+            HysteriaStreamSettings.fromJson(json.hysteriaSettings),
             FinalMaskStreamSettings.fromJson(json.finalmask),
             SockoptStreamSettings.fromJson(json.sockopt),
         );
@@ -1136,6 +1246,7 @@ class StreamSettings extends XrayCommonClass {
             grpcSettings: network === 'grpc' ? this.grpc.toJson() : undefined,
             httpupgradeSettings: network === 'httpupgrade' ? this.httpupgrade.toJson() : undefined,
             xhttpSettings: network === 'xhttp' ? this.xhttp.toJson() : undefined,
+            hysteriaSettings: network === 'hysteria' ? this.hysteria.toJson() : undefined,
             finalmask: this.hasFinalMask ? this.finalmask.toJson() : undefined,
             sockopt: this.sockopt != undefined ? this.sockopt.toJson() : undefined,
         };
@@ -1202,6 +1313,7 @@ class Inbound extends XrayCommonClass {
             case Protocols.VLESS: return this.settings.vlesses;
             case Protocols.TROJAN: return this.settings.trojans;
             case Protocols.SHADOWSOCKS: return this.isSSMultiUser ? this.settings.shadowsockses : null;
+            case Protocols.HYSTERIA: return this.settings.hysterias;
             default: return null;
         }
     }
@@ -1213,8 +1325,13 @@ class Inbound extends XrayCommonClass {
     set protocol(protocol) {
         this._protocol = protocol;
         this.settings = Inbound.Settings.getSettings(protocol);
+        this.stream = new StreamSettings();
         if (protocol === Protocols.TROJAN) {
             this.tls = false;
+        }
+        if (protocol === Protocols.HYSTERIA) {
+            this.stream.network = 'hysteria';
+            this.stream.security = 'tls';
         }
     }
 
@@ -1317,6 +1434,7 @@ class Inbound extends XrayCommonClass {
     }
 
     canEnableTls() {
+        if (this.protocol === Protocols.HYSTERIA) return true;
         if (![Protocols.VMESS, Protocols.VLESS, Protocols.TROJAN, Protocols.SHADOWSOCKS].includes(this.protocol)) return false;
         return ["tcp", "ws", "http", "grpc", "httpupgrade", "xhttp"].includes(this.network);
     }
@@ -1342,7 +1460,7 @@ class Inbound extends XrayCommonClass {
     }
 
     canEnableStream() {
-        return [Protocols.VMESS, Protocols.VLESS, Protocols.TROJAN, Protocols.SHADOWSOCKS].includes(this.protocol);
+        return [Protocols.VMESS, Protocols.VLESS, Protocols.TROJAN, Protocols.SHADOWSOCKS, Protocols.HYSTERIA].includes(this.protocol);
     }
 
     reset() {
@@ -1701,6 +1819,26 @@ class Inbound extends XrayCommonClass {
         return url.toString();
     }
 
+    genHysteriaLink(address = '', port = this.port, remark = '', clientAuth) {
+        const protocol = this.settings.version == 2 ? "hysteria2" : "hysteria";
+        const link = `${protocol}://${clientAuth}@${address}:${port}`;
+
+        const params = new Map();
+        params.set("security", "tls");
+        if (this.stream.tls.settings.fingerprint?.length > 0) params.set("fp", this.stream.tls.settings.fingerprint);
+        if (this.stream.tls.alpn?.length > 0) params.set("alpn", this.stream.tls.alpn);
+        if (this.stream.tls.settings.allowInsecure) params.set("insecure", "1");
+        if (this.stream.tls.settings.echConfigList?.length > 0) params.set("ech", this.stream.tls.settings.echConfigList.join(','));
+        if (this.stream.tls.sni?.length > 0) params.set("sni", this.stream.tls.sni);
+
+        const url = new URL(link);
+        for (const [key, value] of params) {
+            url.searchParams.set(key, value);
+        }
+        url.hash = encodeURIComponent(remark);
+        return url.toString();
+    }
+
     getWireguardLink(address, port, remark, peerId) {
         let txt = `[Interface]\n`
         txt += `PrivateKey = ${this.settings.peers[peerId].privateKey}\n`
@@ -1733,6 +1871,8 @@ class Inbound extends XrayCommonClass {
                 return this.genSSLink(address, port, forceTls, remark, this.isSSMultiUser ? client.password : '');
             case Protocols.TROJAN:
                 return this.genTrojanLink(address, port, forceTls, remark, client.password);
+            case Protocols.HYSTERIA:
+                return this.genHysteriaLink(address, port, remark, client.auth.length > 0 ? client.auth : this.stream.hysteria.auth);
             default: return '';
         }
     }
@@ -1834,6 +1974,7 @@ Inbound.Settings = class extends XrayCommonClass {
             case Protocols.VLESS: return new Inbound.VLESSSettings(protocol);
             case Protocols.TROJAN: return new Inbound.TrojanSettings(protocol);
             case Protocols.SHADOWSOCKS: return new Inbound.ShadowsocksSettings(protocol);
+            case Protocols.HYSTERIA: return new Inbound.HysteriaSettings(protocol);
             case Protocols.DOKODEMO: return new Inbound.DokodemoSettings(protocol);
             case Protocols.SOCKS: return new Inbound.SocksSettings(protocol);
             case Protocols.HTTP: return new Inbound.HttpSettings(protocol);
@@ -1849,6 +1990,7 @@ Inbound.Settings = class extends XrayCommonClass {
             case Protocols.VLESS: return Inbound.VLESSSettings.fromJson(json);
             case Protocols.TROJAN: return Inbound.TrojanSettings.fromJson(json);
             case Protocols.SHADOWSOCKS: return Inbound.ShadowsocksSettings.fromJson(json);
+            case Protocols.HYSTERIA: return Inbound.HysteriaSettings.fromJson(json);
             case Protocols.DOKODEMO: return Inbound.DokodemoSettings.fromJson(json);
             case Protocols.SOCKS: return Inbound.SocksSettings.fromJson(json);
             case Protocols.HTTP: return Inbound.HttpSettings.fromJson(json);
@@ -1860,6 +2002,78 @@ Inbound.Settings = class extends XrayCommonClass {
 
     toJson() {
         return {};
+    }
+};
+
+/** Shared user-quota fields and UI helpers for multi-user protocol clients. */
+Inbound.ClientBase = class extends XrayCommonClass {
+    constructor(
+        email = RandomUtil.randomLowerAndNum(8),
+        totalGB = 0,
+        expiryTime = 0,
+        enable = true,
+        tgId = '',
+        subId = RandomUtil.randomLowerAndNum(16),
+        reset = 0,
+    ) {
+        super();
+        this.email = email;
+        this.totalGB = totalGB;
+        this.expiryTime = expiryTime;
+        this.enable = enable;
+        this.tgId = tgId;
+        this.subId = subId;
+        this.reset = reset;
+    }
+
+    static commonArgsFromJson(json = {}) {
+        return [
+            json.email,
+            json.totalGB,
+            json.expiryTime,
+            json.enable,
+            json.tgId,
+            json.subId,
+            json.reset,
+        ];
+    }
+
+    _clientBaseToJson() {
+        return {
+            email: this.email,
+            totalGB: this.totalGB,
+            expiryTime: this.expiryTime,
+            enable: this.enable,
+            tgId: this.tgId,
+            subId: this.subId,
+            reset: this.reset,
+        };
+    }
+
+    get _expiryTime() {
+        if (this.expiryTime === 0 || this.expiryTime === '') {
+            return null;
+        }
+        if (this.expiryTime < 0) {
+            return this.expiryTime / -86400000;
+        }
+        return moment(this.expiryTime);
+    }
+
+    set _expiryTime(t) {
+        if (t == null || t === '') {
+            this.expiryTime = 0;
+        } else {
+            this.expiryTime = t.valueOf();
+        }
+    }
+
+    get _totalGB() {
+        return toFixed(this.totalGB / ONE_GB, 2);
+    }
+
+    set _totalGB(gb) {
+        this.totalGB = toFixed(gb * ONE_GB, 0);
     }
 };
 
@@ -1902,68 +2116,32 @@ Inbound.VmessSettings = class extends Inbound.Settings {
     }
 };
 
-Inbound.VmessSettings.Vmess = class extends XrayCommonClass {
+Inbound.VmessSettings.Vmess = class extends Inbound.ClientBase {
     constructor(
         id = RandomUtil.randomUUID(),
         security = USERS_SECURITY.AUTO,
-        email = RandomUtil.randomLowerAndNum(8),
-        totalGB = 0,
-        expiryTime = 0,
-        enable = true,
-        tgId = '',
-        subId = RandomUtil.randomLowerAndNum(16),
-        reset = 0
+        email,totalGB,expiryTime,enable,tgId,subId,reset,
     ) {
-        super();
+        super(email, totalGB, expiryTime, enable, tgId, subId, reset);
         this.id = id;
         this.security = security;
-        this.email = email;
-        this.totalGB = totalGB;
-        this.expiryTime = expiryTime;
-        this.enable = enable;
-        this.tgId = tgId;
-        this.subId = subId;
-        this.reset = reset;
     }
 
     static fromJson(json = {}) {
         return new Inbound.VmessSettings.Vmess(
             json.id,
             json.security,
-            json.email,
-            json.totalGB,
-            json.expiryTime,
-            json.enable,
-            json.tgId,
-            json.subId,
-            json.reset,
+            ...Inbound.ClientBase.commonArgsFromJson(json),
         );
     }
-    get _expiryTime() {
-        if (this.expiryTime === 0 || this.expiryTime === '') {
-            return null;
-        }
-        if (this.expiryTime < 0) {
-            return this.expiryTime / -86400000;
-        }
-        return moment(this.expiryTime);
-    }
 
-    set _expiryTime(t) {
-        if (t == null || t === '') {
-            this.expiryTime = 0;
-        } else {
-            this.expiryTime = t.valueOf();
-        }
+    toJson() {
+        return {
+            id: this.id,
+            security: this.security,
+            ...this._clientBaseToJson(),
+        };
     }
-    get _totalGB() {
-        return toFixed(this.totalGB / ONE_GB, 2);
-    }
-
-    set _totalGB(gb) {
-        this.totalGB = toFixed(gb * ONE_GB, 0);
-    }
-
 };
 
 Inbound.VLESSSettings = class extends Inbound.Settings {
@@ -2041,67 +2219,31 @@ Inbound.VLESSSettings = class extends Inbound.Settings {
     }
 };
 
-Inbound.VLESSSettings.VLESS = class extends XrayCommonClass {
+Inbound.VLESSSettings.VLESS = class extends Inbound.ClientBase {
     constructor(
         id = RandomUtil.randomUUID(),
         flow = '',
-        email = RandomUtil.randomLowerAndNum(8),
-        totalGB = 0,
-        expiryTime = 0,
-        enable = true,
-        tgId = '',
-        subId = RandomUtil.randomLowerAndNum(16),
-        reset = 0
+        email,totalGB,expiryTime,enable,tgId,subId,reset,
     ) {
-        super();
+        super(email, totalGB, expiryTime, enable, tgId, subId, reset);
         this.id = id;
         this.flow = flow;
-        this.email = email;
-        this.totalGB = totalGB;
-        this.expiryTime = expiryTime;
-        this.enable = enable;
-        this.tgId = tgId;
-        this.subId = subId;
-        this.reset = reset;
     }
 
     static fromJson(json = {}) {
         return new Inbound.VLESSSettings.VLESS(
             json.id,
             json.flow,
-            json.email,
-            json.totalGB,
-            json.expiryTime,
-            json.enable,
-            json.tgId,
-            json.subId,
-            json.reset,
+            ...Inbound.ClientBase.commonArgsFromJson(json),
         );
     }
 
-    get _expiryTime() {
-        if (this.expiryTime === 0 || this.expiryTime === '') {
-            return null;
-        }
-        if (this.expiryTime < 0) {
-            return this.expiryTime / -86400000;
-        }
-        return moment(this.expiryTime);
-    }
-
-    set _expiryTime(t) {
-        if (t == null || t === '') {
-            this.expiryTime = 0;
-        } else {
-            this.expiryTime = t.valueOf();
-        }
-    }
-    get _totalGB() {
-        return toFixed(this.totalGB / ONE_GB, 2);
-    }
-
-    set _totalGB(gb) {
-        this.totalGB = toFixed(gb * ONE_GB, 0);
+    toJson() {
+        return {
+            id: this.id,
+            flow: this.flow,
+            ...this._clientBaseToJson(),
+        };
     }
 };
 Inbound.VLESSSettings.Fallback = class extends XrayCommonClass {
@@ -2175,79 +2317,28 @@ Inbound.TrojanSettings = class extends Inbound.Settings {
     }
 };
 
-Inbound.TrojanSettings.Trojan = class extends XrayCommonClass {
+Inbound.TrojanSettings.Trojan = class extends Inbound.ClientBase {
     constructor(
         password = RandomUtil.randomSeq(10),
-        email = RandomUtil.randomLowerAndNum(8),
-        totalGB = 0,
-        expiryTime = 0,
-        enable = true,
-        tgId = '',
-        subId = RandomUtil.randomLowerAndNum(16),
-        reset = 0
+        email,totalGB,expiryTime,enable,tgId,subId,reset,
     ) {
-        super();
+        super(email, totalGB, expiryTime, enable, tgId, subId, reset);
         this.password = password;
-        this.email = email;
-        this.totalGB = totalGB;
-        this.expiryTime = expiryTime;
-        this.enable = enable;
-        this.tgId = tgId;
-        this.subId = subId;
-        this.reset = reset;
     }
 
     toJson() {
         return {
             password: this.password,
-            email: this.email,
-            totalGB: this.totalGB,
-            expiryTime: this.expiryTime,
-            enable: this.enable,
-            tgId: this.tgId,
-            subId: this.subId,
-            reset: this.reset,
+            ...this._clientBaseToJson(),
         };
     }
 
     static fromJson(json = {}) {
         return new Inbound.TrojanSettings.Trojan(
             json.password,
-            json.email,
-            json.totalGB,
-            json.expiryTime,
-            json.enable,
-            json.tgId,
-            json.subId,
-            json.reset,
+            ...Inbound.ClientBase.commonArgsFromJson(json),
         );
     }
-
-    get _expiryTime() {
-        if (this.expiryTime === 0 || this.expiryTime === '') {
-            return null;
-        }
-        if (this.expiryTime < 0) {
-            return this.expiryTime / -86400000;
-        }
-        return moment(this.expiryTime);
-    }
-
-    set _expiryTime(t) {
-        if (t == null || t === '') {
-            this.expiryTime = 0;
-        } else {
-            this.expiryTime = t.valueOf();
-        }
-    }
-    get _totalGB() {
-        return toFixed(this.totalGB / ONE_GB, 2);
-    }
-
-    set _totalGB(gb) {
-        this.totalGB = toFixed(gb * ONE_GB, 0);
-    }
-
 };
 
 Inbound.TrojanSettings.Fallback = class extends XrayCommonClass {
@@ -2327,41 +2418,22 @@ Inbound.ShadowsocksSettings = class extends Inbound.Settings {
     }
 };
 
-Inbound.ShadowsocksSettings.Shadowsocks = class extends XrayCommonClass {
+Inbound.ShadowsocksSettings.Shadowsocks = class extends Inbound.ClientBase {
     constructor(
         method = '',
         password = RandomUtil.randomShadowsocksPassword(),
-        email = RandomUtil.randomLowerAndNum(8),
-        totalGB = 0,
-        expiryTime = 0,
-        enable = true,
-        tgId = '',
-        subId = RandomUtil.randomLowerAndNum(16),
-        reset = 0
+        email,totalGB,expiryTime,enable,tgId,subId,reset,
     ) {
-        super();
+        super(email, totalGB, expiryTime, enable, tgId, subId, reset);
         this.method = method;
         this.password = password;
-        this.email = email;
-        this.totalGB = totalGB;
-        this.expiryTime = expiryTime;
-        this.enable = enable;
-        this.tgId = tgId;
-        this.subId = subId;
-        this.reset = reset;
     }
 
     toJson() {
         return {
             method: this.method,
             password: this.password,
-            email: this.email,
-            totalGB: this.totalGB,
-            expiryTime: this.expiryTime,
-            enable: this.enable,
-            tgId: this.tgId,
-            subId: this.subId,
-            reset: this.reset,
+            ...this._clientBaseToJson(),
         };
     }
 
@@ -2369,41 +2441,56 @@ Inbound.ShadowsocksSettings.Shadowsocks = class extends XrayCommonClass {
         return new Inbound.ShadowsocksSettings.Shadowsocks(
             json.method,
             json.password,
-            json.email,
-            json.totalGB,
-            json.expiryTime,
-            json.enable,
-            json.tgId,
-            json.subId,
-            json.reset,
+            ...Inbound.ClientBase.commonArgsFromJson(json),
+        );
+    }
+};
+
+Inbound.HysteriaSettings = class extends Inbound.Settings {
+    constructor(protocol, version = 2, hysterias = [new Inbound.HysteriaSettings.Hysteria()]) {
+        super(protocol);
+        this.version = version;
+        this.hysterias = hysterias;
+    }
+
+    static fromJson(json = {}) {
+        return new Inbound.HysteriaSettings(
+            Protocols.HYSTERIA,
+            json.version,
+            json.clients.map(client => Inbound.HysteriaSettings.Hysteria.fromJson(client)),
         );
     }
 
-    get _expiryTime() {
-        if (this.expiryTime === 0 || this.expiryTime === '') {
-            return null;
-        }
-        if (this.expiryTime < 0) {
-            return this.expiryTime / -86400000;
-        }
-        return moment(this.expiryTime);
+    toJson() {
+        return {
+            version: this.version,
+            clients: Inbound.HysteriaSettings.toJsonArray(this.hysterias),
+        };
+    }
+};
+
+Inbound.HysteriaSettings.Hysteria = class extends Inbound.ClientBase {
+    constructor(
+        auth = RandomUtil.randomSeq(10),
+        email,totalGB,expiryTime,enable,tgId,subId,reset,
+    ) {
+        super(email, totalGB, expiryTime, enable, tgId, subId, reset);
+        this.auth = auth;
     }
 
-    set _expiryTime(t) {
-        if (t == null || t === '') {
-            this.expiryTime = 0;
-        } else {
-            this.expiryTime = t.valueOf();
-        }
-    }
-    get _totalGB() {
-        return toFixed(this.totalGB / ONE_GB, 2);
+    toJson() {
+        return {
+            auth: this.auth,
+            ...this._clientBaseToJson(),
+        };
     }
 
-    set _totalGB(gb) {
-        this.totalGB = toFixed(gb * ONE_GB, 0);
+    static fromJson(json = {}) {
+        return new Inbound.HysteriaSettings.Hysteria(
+            json.auth,
+            ...Inbound.ClientBase.commonArgsFromJson(json),
+        );
     }
-
 };
 
 Inbound.DokodemoSettings = class extends Inbound.Settings {

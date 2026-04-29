@@ -123,6 +123,9 @@
                         client.flow = "";
                     });
                 }
+                if (inModal.inbound.stream.network != 'kcp') {
+                    inModal.inbound.stream.finalmask.udp = [];
+                }
             },
             SSMethodChange() {
                 if (this.inModal.inbound.isSSMultiUser) {
